@@ -41,6 +41,16 @@ class CoreStack(Stack):
         jobs = ddb.Table(self, "Jobs",
             partition_key=ddb.Attribute(name="job_id", type=ddb.AttributeType.STRING),
             billing_mode=ddb.BillingMode.PAY_PER_REQUEST)
+        conversations = ddb.Table(self, "Conversations",
+            partition_key=ddb.Attribute(name="conversation_id", type=ddb.AttributeType.STRING),
+            billing_mode=ddb.BillingMode.PAY_PER_REQUEST,
+            point_in_time_recovery=True)
+        messages = ddb.Table(self, "Messages",
+            partition_key=ddb.Attribute(name="conversation_id", type=ddb.AttributeType.STRING),
+            sort_key=ddb.Attribute(name="created_at", type=ddb.AttributeType.STRING),
+            billing_mode=ddb.BillingMode.PAY_PER_REQUEST,
+            point_in_time_recovery=True)
+
 
         managed = iam.ManagedPolicy(self, "LambdaBedrockS3DdbPolicy",
             statements=[
@@ -48,7 +58,8 @@ class CoreStack(Stack):
                     "bedrock:InvokeModel","bedrock:InvokeModelWithResponseStream"
                 ], resources=["*"]),
                 iam.PolicyStatement(actions=["dynamodb:*"], resources=[
-                    products.table_arn, listings.table_arn, users.table_arn, jobs.table_arn
+                    products.table_arn, listings.table_arn, users.table_arn, jobs.table_arn,
+                    conversations.table_arn, messages.table_arn
                 ]),
                 iam.PolicyStatement(actions=["s3:*Object","s3:ListBucket"], resources=[
                     uploads.bucket_arn, f"{uploads.bucket_arn}/*",
@@ -78,6 +89,8 @@ class CoreStack(Stack):
             "DDB_LISTINGS": listings.table_name,
             "DDB_USERS": users.table_name,
             "DDB_JOBS": jobs.table_name,
+            "DDB_CONVERSATIONS": conversations.table_name,
+            "DDB_MESSAGES": messages.table_name,
             "S3_UPLOADS": uploads.bucket_name,
             "S3_ASSETS": assets.bucket_name,
             "S3_PUBLIC": public.bucket_name,
@@ -117,6 +130,8 @@ class CoreStack(Stack):
         listings.grant_read_write_data(fn_listing)
         uploads.grant_read_write(fn_design); assets.grant_read_write(fn_design); assets.grant_read(fn_listing)
         key.grant_encrypt_decrypt(fn_interpret); key.grant_encrypt_decrypt(fn_design); key.grant_encrypt_decrypt(fn_listing)
+        conversations.grant_read_write_data(fn_interpret); conversations.grant_read_write_data(fn_design); conversations.grant_read_write_data(fn_create)
+        messages.grant_read_write_data(fn_interpret); messages.grant_read_write_data(fn_design); messages.grant_read_write_data(fn_create)
 
         api = apigw.RestApi(self, "KaiKashiApi",
             rest_api_name="KaiKashi Dream API",

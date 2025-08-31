@@ -2,49 +2,59 @@ from __future__ import annotations
 import os, json, boto3
 from boto3.dynamodb.conditions import Attr
 
-dynamodb = boto3.resource("dynamodb")
-tbl_products = dynamodb.Table(os.environ["DDB_PRODUCTS"])
-tbl_listings = dynamodb.Table(os.environ["DDB_LISTINGS"])
+ddb = boto3.resource("dynamodb")
+TBL_PRODUCTS = os.environ["DDB_PRODUCTS"]
+TBL_LISTINGS = os.environ["DDB_LISTINGS"]
+
+tbl_products = ddb.Table(TBL_PRODUCTS)
+tbl_listings = ddb.Table(TBL_LISTINGS)
 
 def _ok(b, c=200):
-    return {"statusCode": c, "headers":{"Content-Type":"application/json"},
-            "body": json.dumps(b, ensure_ascii=False)}
+    return {
+        "statusCode": c,
+        "headers": {"Content-Type": "application/json"},
+        "body": json.dumps(b, ensure_ascii=False),
+    }
+
+def _first_active_listing_for_product(pid: str, want_stage: str | None):
+    fe = Attr("product_id").eq(pid) & Attr("status").eq("active")
+    if want_stage:
+        fe = fe & Attr("metadata.stage").eq(want_stage)
+
+    resp = tbl_listings.scan(
+        Limit=1,
+        FilterExpression=fe,
+    )
+    items = resp.get("Items") or []
+    return items[0] if items else None
 
 def handler(event, _ctx):
     qs = event.get("queryStringParameters") or {}
     owner = qs.get("owner")
     status = qs.get("status")
     limit = int(qs.get("limit") or "20")
+    stage = qs.get("stage") or os.environ.get("STAGE")
 
-    scan_kwargs = {"Limit": limit*2}
+    fe = Attr("media_keys").size().gt(0)  
+    if owner:
+        fe = fe & Attr("owner_id").eq(owner)
     if status:
-        try:
-            scan_kwargs["FilterExpression"] = Attr("status").eq(status)
-        except AttributeError:
-            scan_kwargs["FilterExpression"] = Attr("status") == status
+        fe = fe & Attr("status").eq(status)
 
-    resp = tbl_listings.scan(**scan_kwargs)
-    items = resp.get("Items", [])
-
-    product_ids = [it["product_id"] for it in items if "product_id" in it]
-    if not product_ids:
-        return _ok({"items": [], "count": 0})
-
-    client = dynamodb.meta.client
-    resp2 = client.batch_get_item(RequestItems={
-        os.environ["DDB_PRODUCTS"]: {"Keys":[{"product_id": pid} for pid in product_ids]}
-    })
-    prods = {p["product_id"]: p for p in resp2["Responses"].get(os.environ["DDB_PRODUCTS"], [])}
+    resp = tbl_products.scan(
+        Limit=max(50, limit * 3),
+        FilterExpression=fe,
+    )
+    products = resp.get("Items", [])
 
     out = []
-    for li in items:
-        p = prods.get(li["product_id"])
-        if not p: continue
-        if owner and p.get("owner_id") != owner: continue
-        media = p.get("media_keys") or []
-        if not media: continue
-        out.append({"listing": li, "product": p})
-
-        if len(out) >= limit: break
+    for p in products:
+        pid = p.get("product_id")
+        if not pid:
+            continue
+        listing = _first_active_listing_for_product(pid, stage)
+        out.append({"product": p, "listing": listing})
+        if len(out) >= limit:
+            break
 
     return _ok({"items": out, "count": len(out)})
