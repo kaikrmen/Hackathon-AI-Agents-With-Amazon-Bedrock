@@ -3,6 +3,8 @@ import boto3
 from .config import settings
 from botocore.config import Config
 
+_s3 = None
+
 def s3_client():
     global _s3
     if _s3 is None:
