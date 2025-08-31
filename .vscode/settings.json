@@ -1,3 +1,5 @@
 {
-  "python.analysis.extraPaths": ["layers/app_common/python"]
+    "python.analysis.extraPaths": [
+        "./layers/app_common/python"
+    ]
 }
