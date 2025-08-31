@@ -1,5 +1,5 @@
 import aws_cdk as cdk
-from stacks.core_stack import CoreStack
+from .stacks.core_stack import CoreStack
 
 app = cdk.App()
 CoreStack(app, "KaiKashiCoreStack", env=cdk.Environment(

@@ -1,0 +1,265 @@
+openapi: 3.1.0
+info:
+  title: KaiKashi Dream API
+  version: "1.0.0"
+  description: |
+    API para convertir ideas en *briefs* y generar assets (imagen, DOCX/RTF, GIF, 3D).
+    - `POST /create`: interpreta la idea, genera assets,s crea product + listing.
+    - `GET /products`: lista tus productos con **todas** las media keys y URLs presignadas.
+    - `GET /ping`: healthcheck.
+
+servers:
+  - url: http://localhost:8000
+
+tags:
+  - name: System
+  - name: Products
+  - name: Generate
+
+paths:
+  /ping:
+    get:
+      tags: [System]
+      summary: Healthcheck y metadatos de entorno
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  region: { type: string }
+                  model: { type: string }
+                  stage: { type: string }
+              example:
+                ok: true
+                region: us-east-1
+                model: anthropic.claude-3-sonnet
+                stage: dev
+
+  /products:
+    get:
+      tags: [Products]
+      summary: Lista productos del owner con media y URLs presignadas
+      description: |
+        Devuelve *solo* productos que **tengan media** (cuando `require_media=True` en backend).
+        Paginación por cursor (**base64**) vía `page_token`.
+      parameters:
+        - in: query
+          name: owner
+          schema: { type: string, nullable: true }
+          description: Por defecto, el usuario autenticado (dev: user_dev_001).
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - in: query
+          name: page_token
+          schema: { type: string, nullable: true }
+          description: Cursor base64 devuelto por la página anterior.
+        - in: query
+          name: status
+          schema: { type: string, nullable: true }
+          description: Filtra por status del producto (ej. `draft`).
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductsResponse'
+              examples:
+                sample:
+                  value:
+                    items:
+                      - product_id: prd_abc123def456
+                        title: crear libro educativo sobre la Guerra Fría
+                        description: Generado automáticamente a partir de tu idea...
+                        status: draft
+                        owner_id: user_dev_001
+                        media:
+                          - key: assets/user_dev_001/generated/book_crear libro educativo.../book_crear libro...docx
+                            url: https://s3-presigned-url
+                            type: docx
+                          - key: assets/user_dev_001/generated/book_crear.../book_crear....gif
+                            url: https://s3-presigned-url
+                            type: video
+                    count: 1
+                    next_page_token: eyJMYXN0RXZhbHVhdGVkS2V5IjogeyJwcm9kdWN0X2lkIjogInByZF8uLi4ifX0=
+                    applied_filters:
+                      owner: user_dev_001
+                      status: null
+                      limit: 20
+
+  /create:
+    post:
+      tags: [Generate]
+      summary: Convierte una idea en brief, genera assets y publica product+listing
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [q]
+              properties:
+                q:
+                  type: string
+                  description: Idea/Sueño del usuario (ES/EN)
+                price_cents:
+                  type: integer
+                  default: 1500
+                file:
+                  type: string
+                  format: binary
+                  description: Archivo opcional (imagen/pdf/etc. para referencia (Quitar el checkbox sino se inserta imagen))
+                conversation_title:
+                  type: string
+                  nullable: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateResponse'
+              examples:
+                sample:
+                  value:
+                    conversation_id: conv_643ff3142341
+                    uploaded:
+                      key: null
+                      content_type: null
+                    brief:
+                      intent: crear libro educativo sobre la Guerra Fría
+                      style: histórico, educativo, documental, ilustrado
+                      product_type: book
+                      tags: [guerra fria, historia, siglo xx, educativo, politica, conflicto, documentado]
+                      design_prompt: Portada de libro histórico con elementos...
+                      notes: Dirigido a estudiantes...
+                    design:
+                      kinds: [docx, txt, video]
+                      media_keys:
+                        - assets/user_dev_001/generated/book_crear.../book_crear....docx
+                        - assets/user_dev_001/generated/book_crear.../book_crear....txt
+                        - assets/user_dev_001/generated/book_crear.../book_crear....gif
+                      media:
+                        - key: assets/...docx
+                          url: https://s3-presigned-url
+                          type: docx
+                        - key: assets/...txt
+                          url: https://s3-presigned-url
+                          type: txt
+                        - key: assets/...gif
+                          url: https://s3-presigned-url
+                          type: video
+                      package:
+                        suggested_title: crear libro educativo sobre la Guerra Fría
+                        suggested_description: Generado automáticamente...
+                        brief: {}
+                        design_prompt: "...text..."
+                    ids:
+                      product_id: prd_16cd070cb4a6
+                      listing_id: lst_f86ac5e7a2c1
+                    price_cents: 1500
+                    currency: USD
+                    preview_url: https://s3-presigned-url
+        "400":
+          description: Bad Request
+        "500":
+          description: Error interno
+
+components:
+  schemas:
+    MediaItem:
+      type: object
+      properties:
+        key:   { type: string }
+        url:   { type: string, nullable: true }
+        type:  { type: string, enum: [image, pdf, docx, rtf, txt, video, 3d, file] }
+
+    ProductItem:
+      type: object
+      properties:
+        product_id:   { type: string }
+        title:        { type: string }
+        description:  { type: string }
+        status:       { type: string }
+        owner_id:     { type: string }
+        media:
+          type: array
+          items: { $ref: '#/components/schemas/MediaItem' }
+
+    ProductsResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ProductItem' }
+        count: { type: integer }
+        next_page_token: { type: string, nullable: true }
+        applied_filters:
+          type: object
+          additionalProperties: true
+
+    Brief:
+      type: object
+      properties:
+        intent: { type: string }
+        style: { type: string }
+        product_type: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+        design_prompt: { type: string }
+        notes: { type: string }
+
+    DesignPayload:
+      type: object
+      properties:
+        kinds:
+          type: array
+          items: { type: string }
+        media_keys:
+          type: array
+          items: { type: string }
+        media:
+          type: array
+          items: { $ref: '#/components/schemas/MediaItem' }
+        package:
+          type: object
+          properties:
+            suggested_title: { type: string }
+            suggested_description: { type: string }
+            design_prompt: { type: string }
+            brief: { $ref: '#/components/schemas/Brief' }
+        errors:
+          type: object
+          additionalProperties: { type: string }
+        image_key: { type: string, nullable: true }
+        docx_key: { type: string, nullable: true }
+        rtf_key: { type: string, nullable: true }
+        text_key: { type: string, nullable: true }
+        video_key: { type: string, nullable: true }
+        model3d_key: { type: string, nullable: true }
+
+    CreateResponse:
+      type: object
+      properties:
+        conversation_id: { type: string }
+        uploaded:
+          type: object
+          properties:
+            key: { type: string, nullable: true }
+            content_type: { type: string, nullable: true }
+        brief: { $ref: '#/components/schemas/Brief' }
+        design: { $ref: '#/components/schemas/DesignPayload' }
+        ids:
+          type: object
+          properties:
+            product_id: { type: string }
+            listing_id: { type: string }
+        price_cents: { type: integer }
+        currency: { type: string }
+        preview_url: { type: string, nullable: true }

@@ -1,5 +1,5 @@
 from __future__ import annotations
-import base64, json, datetime, io
+import base64, json, datetime, io, random
 from typing import Dict, Any, Optional, List, Tuple
 from shared.aws import bedrock_runtime
 from shared.s3 import put_object
@@ -12,7 +12,7 @@ def _vendor_from_model_id(model_id: str) -> str:
     if mid.startswith("stability.stable-diffusion"):
         return "sdxl"
     if "anthropic" in mid or "claude" in mid:
-        return "anthropic" 
+        return "anthropic"
     return "unknown"
 
 def _payload_titan(prompt: str) -> Dict[str, Any]:
@@ -20,12 +20,12 @@ def _payload_titan(prompt: str) -> Dict[str, Any]:
         "taskType": "TEXT_IMAGE",
         "textToImageParams": {"text": prompt},
         "imageGenerationConfig": {
-                "numberOfImages": 1,
-                "quality": "standard",
-                "height": 1024,
-                "width": 1024,
-                "cfgScale": 8,
-                "seed": 0,
+            "numberOfImages": 1,
+            "quality": "standard",
+            "height": 1024,
+            "width": 1024,
+            "cfgScale": 8,
+            "seed": 0,
         },
     }
 
@@ -38,7 +38,6 @@ def _payload_sdxl(prompt: str) -> Dict[str, Any]:
         "samples": 1,
         "steps": 30,
     }
-
 
 def _placeholder_svg_bytes(title: str, subtitle: str) -> bytes:
     t = (title or "KaiKashi DreamForge").replace("&", "&amp;")
@@ -80,118 +79,151 @@ f 1/1/1 3/3/1 4/4/1
 """
     return obj.encode("utf-8")
 
-
-def _static_min_pdf(text: str) -> bytes:
-    pdf = f"""%PDF-1.4
-% KaiKashi PDF placeholder
-1 0 obj
-<< /Type /Catalog /Pages 2 0 R >>
-endobj
-2 0 obj
-<< /Type /Pages /Count 1 /Kids [3 0 R] >>
-endobj
-3 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]
-/Resources << >>
-/Contents 4 0 R >>
-endobj
-4 0 obj
-<< /Length 56 >>
-stream
-BT
-/F1 24 Tf
-72 720 Td
-({text[:60].replace('(', '[').replace(')', ']')}) Tj
-ET
-endstream
-endobj
-xref
-0 5
-0000000000 65535 f 
-0000000010 00000 n 
-0000000061 00000 n 
-0000000112 00000 n 
-0000000250 00000 n 
-trailer
-<< /Root 1 0 R /Size 5 >>
-startxref
-360
-%%EOF
-"""
-    return pdf.encode("latin-1")
-
-def _build_pdf_bytes(title: str, notes: str) -> bytes:
-    txt = f"KaiKashi DreamForge — {title} — {datetime.datetime.utcnow().isoformat()}Z — {notes}"
-    return _static_min_pdf(txt)
-
-def _build_docx_or_rtf_bytes(brief: Dict[str, Any], design_prompt: str) -> Tuple[bytes, str, str]:
-    try:
-        from docx import Document 
-        doc = Document()
-        doc.add_heading('KaiKashi DreamForge - Brief', level=1)
-        p = doc.add_paragraph(); p.add_run("Intent: ").bold = True; p.add_run(brief.get("intent",""))
-        p = doc.add_paragraph(); p.add_run("Product: ").bold = True; p.add_run(brief.get("product_type",""))
-        p = doc.add_paragraph(); p.add_run("Style: ").bold = True; p.add_run(brief.get("style",""))
-        p = doc.add_paragraph(); p.add_run("Tags: ").bold = True; p.add_run(", ".join(brief.get("tags", [])))
-        doc.add_heading("Design prompt", level=2); doc.add_paragraph(design_prompt)
-        doc.add_heading("Notes", level=2); doc.add_paragraph(brief.get("notes",""))
-        buf = io.BytesIO(); doc.save(buf)
-        return buf.getvalue(), ".docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    except Exception:
-        def esc(s: str) -> str:
-            return s.replace("\\", "\\\\").replace("{", "\\{").replace("}", "\\}")
-        rtf = (
-            r"{\rtf1\ansi"
-            r"\b KaiKashi DreamForge - Brief \b0\par "
-            r"\b Intent:\b0 " + esc(brief.get("intent","")) + r"\par "
-            r"\b Product:\b0 " + esc(brief.get("product_type","")) + r"\par "
-            r"\b Style:\b0 " + esc(brief.get("style","")) + r"\par "
-            r"\b Tags:\b0 " + esc(", ".join(brief.get("tags", []))) + r"\par "
-            r"\b Design prompt:\b0\par " + esc(design_prompt) + r"\par "
-            r"\b Notes:\b0\par " + esc(brief.get("notes","")) + r"\par "
-            r"}"
-        )
-        return rtf.encode("utf-8"), ".rtf", "application/rtf"
-
-def _build_txt_bytes(brief: Dict[str, Any], design_prompt: str) -> bytes:
-    lines = [
-        "KaiKashi DreamForge - Production Brief",
-        f"Intent: {brief.get('intent','')}",
-        f"Product: {brief.get('product_type','')}",
-        f"Style: {brief.get('style','')}",
-        f"Tags: {', '.join(brief.get('tags', []))}",
-        "",
-        "Design Prompt:",
-        design_prompt,
-        "",
-        "Notes:",
-        brief.get("notes",""),
+def _make_book_outline(brief: Dict[str, Any]) -> List[str]:
+    """
+    Crea un bosquejo de capítulos a partir del intent/tags.
+    Si ya tienes otra lógica/LLM para outline, puedes reemplazar aquí.
+    """
+    base = [
+        "Introducción",
+        "Contexto histórico",
+        "Actores principales",
+        "Eventos clave",
+        "Impacto y consecuencias",
+        "Conclusiones",
+        "Bibliografía"
     ]
-    return ("\n".join(lines)).encode("utf-8")
+    # pimp simple por tags
+    tags = [t.lower() for t in (brief.get("tags") or [])]
+    if any("niñ" in t or "child" in t for t in tags):
+        base.insert(2, "Glosario para jóvenes lectores")
+    return base
 
-def _build_gif_bytes_placeholder() -> Optional[bytes]:
-    """Genera un GIF simple si Pillow está instalado; de lo contrario, None."""
-    try:
-        from PIL import Image, ImageDraw
-    except Exception:
-        return None
-    imgs: List[Any] = []
-    for i in range(12):
-        img = Image.new("RGB", (1024, 1024))
-        d = ImageDraw.Draw(img)
-        d.rectangle((0, 0, 1024, 1024), fill=(10, 10, 20))
-        d.ellipse((112+i*2, 112, 912, 912), fill=(10, 150, 230))
-        d.ellipse((212, 212, 812-i*2, 812), fill=(120, 80, 255))
-        imgs.append(img)
+def _build_book_docx_bytes(brief: Dict[str, Any], design_prompt: str) -> bytes:
+    """
+    Genera un DOCX de 'libro real' con:
+    - Portada (título, subtítulo/estilo)
+    - Índice (lista numerada de capítulos)
+    - Introducción y capítulos con headings
+    - Bibliografía (placeholder)
+    """
+    from docx import Document
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Pt
+    from docx.enum.style import WD_STYLE_TYPE
+
+    title = brief.get("intent") or "Libro generado con KaiKashi"
+    style = brief.get("style") or ""
+    notes = brief.get("notes") or ""
+    outline = _make_book_outline(brief)
+
+    doc = Document()
+
+    if "KaiKashi Body" not in [s.name for s in doc.styles]:
+        body_style = doc.styles.add_style("KaiKashi Body", WD_STYLE_TYPE.PARAGRAPH)
+        body_style.font.name = "Calibri"
+        body_style.font.size = Pt(11)
+
+    p = doc.add_paragraph()
+    run = p.add_run(title)
+    run.bold = True
+    run.font.size = Pt(28)
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    p = doc.add_paragraph(style)
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    p = doc.add_paragraph(datetime.datetime.utcnow().strftime("%Y-%m-%d"))
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    doc.add_page_break()
+
+    doc.add_heading("Índice", level=1)
+    for i, cap in enumerate(outline, 1):
+        doc.add_paragraph(f"{i}. {cap}", style="List Number")
+    doc.add_paragraph("Sugerencia: en Word use Referencias → Tabla de Contenido para insertar/actualizar el TOC.")
+
+    doc.add_page_break()
+
+    doc.add_heading("Introducción", level=1)
+    intro = (
+        f"Este libro aborda {title.lower()}. "
+        f"Estilo: {style}. "
+        f"Notas de producción: {notes}."
+    )
+    doc.add_paragraph(intro, style="KaiKashi Body")
+
+    sample_paras = [
+        "Este capítulo explora los antecedentes y las condiciones que dieron origen al tema. "
+        "Se presentan líneas de tiempo, contextos geopolíticos y referencias comparativas.",
+
+        "Se analizan las principales figuras y organizaciones involucradas, con atención a sus motivaciones, "
+        "decisiones y consecuencias estratégicas.",
+
+        "Se sintetizan los eventos clave de manera cronológica, incluyendo hitos, reacciones y repercusiones regionales.",
+
+        "Se estudian los impactos sociales, económicos y culturales, así como lecciones aprendidas."
+    ]
+    for cap in outline:
+        if cap.lower().startswith(("intro", "bibliograf")):
+            continue
+        doc.add_heading(cap, level=1)
+        for _ in range(3):
+            doc.add_paragraph(random.choice(sample_paras), style="KaiKashi Body")
+
+    if not any("conclu" in c.lower() for c in outline):
+        doc.add_heading("Conclusiones", level=1)
+        doc.add_paragraph(
+            "Resumen de hallazgos, líneas futuras de investigación y recomendaciones prácticas.",
+            style="KaiKashi Body"
+        )
+
+    doc.add_heading("Bibliografía", level=1)
+    bib_samples = [
+        "Autor, A. (Año). Título del libro. Editorial.",
+        "Autor, B. (Año). Artículo en Revista. Revista X, Vol(Y), pp–pp.",
+        "Sitio/Institución (Año). Recurso en línea. URL."
+    ]
+    for b in bib_samples:
+        doc.add_paragraph(f"- {b}", style="KaiKashi Body")
+
+    doc.add_page_break()
+    doc.add_heading("Anexo: Design Prompt", level=2)
+    doc.add_paragraph(design_prompt, style="KaiKashi Body")
+
     buf = io.BytesIO()
-    imgs[0].save(buf, format="GIF", save_all=True, append_images=imgs[1:], duration=80, loop=0)
+    doc.save(buf)
     return buf.getvalue()
 
+def _build_book_txt_bytes(brief: Dict[str, Any], design_prompt: str) -> bytes:
+    title = brief.get("intent") or "Libro"
+    style = brief.get("style") or ""
+    outline = _make_book_outline(brief)
+
+    lines: List[str] = []
+    lines += [title.upper(), "=" * len(title), "", f"Estilo: {style}", ""]
+    lines += ["ÍNDICE", "------"]
+    for i, cap in enumerate(outline, 1):
+        lines.append(f"{i}. {cap}")
+    lines += ["", "INTRODUCCIÓN", "------------",
+              f"Este libro aborda {title.lower()}.",
+              ""]
+    for cap in outline:
+        if cap.lower().startswith(("intro", "bibliograf")):
+            continue
+        lines += [cap.upper(), "-" * len(cap),
+                  "Contenido de capítulo (placeholder).", ""]
+    lines += ["CONCLUSIONES", "------------", "Resumen de hallazgos y recomendaciones.", ""]
+    lines += ["BIBLIOGRAFÍA", "------------",
+              "- Autor, A. (Año). Título del libro. Editorial.",
+              "- Autor, B. (Año). Artículo en Revista. Revista X, Vol(Y), pp–pp.",
+              "- Sitio/Institución (Año). Recurso en línea. URL.", "",
+              "ANEXO: DESIGN PROMPT", "-------------------", design_prompt]
+    return ("\n".join(lines)).encode("utf-8")
 
 def _decide_kinds(brief: Dict[str, Any]) -> List[str]:
     """
-    Decide los tipos a generar según product_type/intent.
-    Retorna una lista con elementos en {"image","pdf","docx","txt","video","3d"}.
+    Decide los tipos a generar. ¡Sin PDF!
     """
     pt = (brief.get("product_type") or "").lower()
     intent = (brief.get("intent") or "").lower()
@@ -206,14 +238,13 @@ def _decide_kinds(brief: Dict[str, Any]) -> List[str]:
     if pt in img_only or "image" in intent:
         return ["image"]
     if pt in doc_only or ("book" in intent and pt == "") or ("libro" in intent and pt == ""):
-        return ["pdf", "docx", "txt"]
+        # Sin PDF: libro real = DOCX + TXT
+        return ["docx", "txt"]
     if pt in vid_only or "video" in pt or "video" in intent or "gif" in intent:
         return ["video"]
     if pt in model_only or "3d" in pt or "3d" in intent:
         return ["3d"]
-
-    return ["image"] 
-
+    return ["image"]
 
 def generate_assets(design_prompt: str, brief: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     outputs: Dict[str, Any] = {}
@@ -224,7 +255,7 @@ def generate_assets(design_prompt: str, brief: Dict[str, Any], user_id: str) -> 
     media_keys: List[str] = []
     kinds = _decide_kinds(brief)
 
-    # ---------- Image ----------
+    # Image
     if "image" in kinds:
         image_key: Optional[str] = None
         try:
@@ -262,36 +293,21 @@ def generate_assets(design_prompt: str, brief: Dict[str, Any], user_id: str) -> 
         outputs["image_key"] = image_key
         media_keys.append(image_key)
 
-    # ---------- DOC ----------
-    if "pdf" in kinds:
-        try:
-            pdf_bytes = _build_pdf_bytes(
-                title=brief.get("intent", "Producto creativo"),
-                notes=brief.get("notes", "")
-            )
-            pdf_key = f"{base}.pdf"
-            put_object(settings.s3_bucket_assets, pdf_key, pdf_bytes, "application/pdf")
-            outputs["pdf_key"] = pdf_key
-            media_keys.append(pdf_key)
-        except Exception as e:
-            errors["pdf"] = f"{type(e).__name__}: {e}"
-
+    # (DOCX + TXT)
     if "docx" in kinds:
         try:
-            doc_bytes, doc_suffix, doc_ct = _build_docx_or_rtf_bytes(brief, design_prompt)
-            doc_key = f"{base}{doc_suffix}"
-            put_object(settings.s3_bucket_assets, doc_key, doc_bytes, doc_ct)
-            if doc_suffix == ".docx":
-                outputs["docx_key"] = doc_key
-            else:
-                outputs["rtf_key"] = doc_key
-            media_keys.append(doc_key)
+            docx_bytes = _build_book_docx_bytes(brief, design_prompt)
+            docx_key = f"{base}.docx"
+            put_object(settings.s3_bucket_assets, docx_key, docx_bytes,
+                       "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+            outputs["docx_key"] = docx_key
+            media_keys.append(docx_key)
         except Exception as e:
             errors["doc"] = f"{type(e).__name__}: {e}"
 
     if "txt" in kinds:
         try:
-            txt_bytes = _build_txt_bytes(brief, design_prompt)
+            txt_bytes = _build_book_txt_bytes(brief, design_prompt)
             txt_key = f"{base}.txt"
             put_object(settings.s3_bucket_assets, txt_key, txt_bytes, "text/plain; charset=utf-8")
             outputs["text_key"] = txt_key
@@ -299,24 +315,31 @@ def generate_assets(design_prompt: str, brief: Dict[str, Any], user_id: str) -> 
         except Exception as e:
             errors["text"] = f"{type(e).__name__}: {e}"
 
-    # ---------- Video (GIF placeholder) ----------
+    # Video (GIF placeholder)
     if "video" in kinds:
         try:
-            gif_bytes = _build_gif_bytes_placeholder()
-            if gif_bytes:
-                gif_key = f"{base}.gif"
-                put_object(settings.s3_bucket_assets, gif_key, gif_bytes, "image/gif")
-                outputs["video_key"] = gif_key
-                media_keys.append(gif_key)
-            else:
-                errors["video"] = "No se generó GIF (falta Pillow)."
+            from PIL import Image, ImageDraw
+            imgs: List[Any] = []
+            for i in range(12):
+                img = Image.new("RGB", (1024, 1024))
+                d = ImageDraw.Draw(img)
+                d.rectangle((0, 0, 1024, 1024), fill=(10, 10, 20))
+                d.ellipse((112+i*2, 112, 912, 912), fill=(10, 150, 230))
+                d.ellipse((212, 212, 812-i*2, 812), fill=(120, 80, 255))
+                imgs.append(img)
+            buf = io.BytesIO()
+            imgs[0].save(buf, format="GIF", save_all=True, append_images=imgs[1:], duration=80, loop=0)
+            gif_key = f"{base}.gif"
+            put_object(settings.s3_bucket_assets, gif_key, buf.getvalue(), "image/gif")
+            outputs["video_key"] = gif_key
+            media_keys.append(gif_key)
         except Exception as e:
             errors["video"] = f"{type(e).__name__}: {e}"
 
-    # ---------- 3D ----------
+    # 3D placeholder
     if "3d" in kinds:
         try:
-            obj_bytes = _placeholder_obj_bytes(brief.get("intent",""))
+            obj_bytes = _placeholder_obj_bytes(brief.get("intent", ""))
             obj_key = f"{base}.obj"
             put_object(settings.s3_bucket_assets, obj_key, obj_bytes, "text/plain")
             outputs["model3d_key"] = obj_key
