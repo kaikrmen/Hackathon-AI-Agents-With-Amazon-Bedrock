@@ -1,7 +1,8 @@
 from __future__ import annotations
-import os, json, boto3
+import os, json, base64, boto3
 from boto3.dynamodb.conditions import Attr
 from decimal import Decimal
+from typing import Optional, Dict, Any, List
 from shared.config import settings
 from shared.s3 import presign_get
 
@@ -20,6 +21,17 @@ def _ok(b, c=200):
     return {"statusCode": c, "headers": {"Content-Type": "application/json"},
             "body": json.dumps(_to_jsonable(b), ensure_ascii=False)}
 
+def _enc(d: Optional[Dict[str, Any]]) -> Optional[str]:
+    if not d: return None
+    return base64.urlsafe_b64encode(json.dumps(d).encode()).decode()
+
+def _dec(s: Optional[str]) -> Optional[Dict[str, Any]]:
+    if not s: return None
+    try:
+        return json.loads(base64.urlsafe_b64decode(s.encode()).decode())
+    except Exception:
+        return None
+
 def _first_active_listing_for_product(pid: str, want_stage: str | None):
     fe = Attr("product_id").eq(pid) & Attr("status").eq("active")
     if want_stage:
@@ -30,16 +42,16 @@ def _first_active_listing_for_product(pid: str, want_stage: str | None):
 
 def _infer_type(key: str) -> str:
     k = (key or "").lower()
-    if k.endswith((".png", ".jpg", ".jpeg", ".webp", ".svg")): return "image"
+    if k.endswith((".png",".jpg",".jpeg",".webp",".svg")): return "image"
     if k.endswith(".pdf"):   return "pdf"
     if k.endswith(".docx"):  return "docx"
     if k.endswith(".rtf"):   return "rtf"
     if k.endswith(".txt"):   return "txt"
-    if k.endswith((".mp4", ".mov", ".webm", ".gif")): return "video"
-    if k.endswith((".obj", ".glb", ".gltf", ".fbx")): return "3d"
+    if k.endswith((".mp4",".mov",".webm",".gif")): return "video"
+    if k.endswith((".obj",".glb",".gltf",".fbx")): return "3d"
     return "file"
 
-def _presign_media(keys: list[str]) -> list[dict]:
+def _presign_media(keys: List[str]) -> List[Dict[str, Any]]:
     out = []
     for mk in keys or []:
         try:
@@ -50,40 +62,51 @@ def _presign_media(keys: list[str]) -> list[dict]:
     return out
 
 def handler(event, _ctx):
-    qs     = event.get("queryStringParameters") or {}
-    owner  = qs.get("owner")
+    qs: Dict[str, str] = event.get("queryStringParameters") or {}
+    owner  = qs.get("owner") or qs.get("user_id")  # acepta owner o user_id
     status = qs.get("status")
     limit  = int(qs.get("limit") or "20")
     stage  = qs.get("stage") or os.environ.get("STAGE")
+    page_token = qs.get("page_token")
+    cursor = _dec(page_token)
 
-    fe = Attr("media_keys").size().gt(0)
-    if owner:  fe = fe & Attr("owner_id").eq(owner)
-    if status: fe = fe & Attr("status").eq(status)
+    if not owner:
+        return _ok({"error": "missing owner/user_id"}, 400)
 
-    resp = tbl_products.scan(Limit=max(50, limit*3), FilterExpression=fe)
+    fe = Attr("media_keys").size().gt(0) & Attr("owner_id").eq(owner)
+    if status:
+        fe = fe & Attr("status").eq(status)
+
+    scan_kwargs = {
+        "Limit": limit,
+        "FilterExpression": fe,
+    }
+    if cursor:
+        scan_kwargs["ExclusiveStartKey"] = cursor
+
+    resp = tbl_products.scan(**scan_kwargs)
     products = resp.get("Items", [])
+    last_key = resp.get("LastEvaluatedKey")
 
     out = []
     for p in products:
         pid = p.get("product_id")
-        if not pid: 
+        if not pid:
             continue
-
-        # presign media del producto
-        media_keys = p.get("media_keys") or []
-        media = _presign_media(media_keys)
-
+        media = _presign_media(p.get("media_keys") or [])
         listing = _first_active_listing_for_product(pid, stage)
-
         out.append({
-            "product": {
-                **p,
-                "media": media, 
-            },
+            "product": {**p, "media": media},
             "listing": listing
         })
 
-        if len(out) >= limit:
-            break
+    has_more = bool(last_key)
+    next_page_token = _enc(last_key) if has_more else None
 
-    return _ok({"items": out, "count": len(out)})
+    return _ok({
+        "items": out,
+        "count": len(out),
+        "has_more": has_more,
+        "next_page_token": next_page_token,
+        "applied_filters": {"owner": owner, "status": status, "limit": limit}
+    })
