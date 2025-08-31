@@ -4,16 +4,16 @@ import os, uuid, json
 from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, Query, UploadFile, File, Form, Depends, HTTPException
 from pydantic import BaseModel
-from shared.config import settings
-from shared.dynamo import ensure_conversation, list_products_by_owner, put_message
-from shared.s3 import put_object, presign_get
-from agents.dream_interpret import interpret_dream
-from agents.design_generate import generate_assets
-from agents.listing_publish import create_product_and_listing
+from layers.app_common.python.shared.config import settings
+from layers.app_common.python.shared.dynamo import ensure_conversation, list_products_by_owner, put_message
+from layers.app_common.python.shared.s3 import put_object, presign_get
+from layers.app_common.python.agents.dream_interpret import interpret_dream
+from layers.app_common.python.agents.design_generate import generate_assets
+from layers.app_common.python.agents.listing_publish import create_product_and_listing
 
 app = FastAPI(title="KaiKashi Dream API", version="1.0.0")
 
-# --------- Auth ----------
+# --------- Auth 
 def get_user_id(auth_bypass: bool = getattr(settings, "auth_bypass", True)) -> str:
     return "user_dev_001" if auth_bypass else "user_unknown"
 
