@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Dict, Any, List, Optional
-from layers.app_common.python.shared.dynamo import put_product, put_listing, new_id
-from layers.app_common.python.shared.config import settings
+from shared.dynamo import put_product, put_listing, new_id
+from shared.config import settings
 
 def create_product_and_listing(
     user_id: str,

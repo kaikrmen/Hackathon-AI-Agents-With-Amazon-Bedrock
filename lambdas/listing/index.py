@@ -1,13 +1,11 @@
 from __future__ import annotations
 import os, json, boto3
 from boto3.dynamodb.conditions import Attr
+from shared.config import settings
 
 ddb = boto3.resource("dynamodb")
-TBL_PRODUCTS = os.environ["DDB_PRODUCTS"]
-TBL_LISTINGS = os.environ["DDB_LISTINGS"]
-
-tbl_products = ddb.Table(TBL_PRODUCTS)
-tbl_listings = ddb.Table(TBL_LISTINGS)
+tbl_products = ddb.Table(settings.ddb_products)
+tbl_listings = ddb.Table(settings.ddb_listings)
 
 def _ok(b, c=200):
     return {

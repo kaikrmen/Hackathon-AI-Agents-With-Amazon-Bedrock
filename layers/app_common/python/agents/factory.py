@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from botocore.config import Config
 from strands.models import BedrockModel
 from strands import Agent
-from layers.app_common.python.shared.config import settings
+from shared.config import settings
 import json, time
 
 @dataclass

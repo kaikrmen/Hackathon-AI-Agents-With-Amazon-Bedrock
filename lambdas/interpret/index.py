@@ -1,6 +1,6 @@
 from __future__ import annotations
 import json
-from layers.app_common.python.agents.dream_interpret import interpret_dream
+from agents.dream_interpret import interpret_dream
 
 def _ok(body, code=200):
     return {"statusCode": code, "headers":{"Content-Type":"application/json"},

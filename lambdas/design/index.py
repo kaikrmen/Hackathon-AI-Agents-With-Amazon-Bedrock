@@ -1,7 +1,7 @@
 from __future__ import annotations
 import json
-from layers.app_common.python.agents.dream_interpret import interpret_dream
-from layers.app_common.python.agents.design_generate import generate_assets
+from agents.dream_interpret import interpret_dream
+from agents.design_generate import generate_assets
 
 def _ok(b, c=200):
     return {"statusCode": c, "headers":{"Content-Type":"application/json"},

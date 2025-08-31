@@ -80,17 +80,17 @@ class CoreStack(Stack):
 
         app_layer = PythonLayerVersion(
             self, "AppCommonLayer",
-            entry="layers/app_common",
+            entry="layers/app_common/python",  
             compatible_runtimes=[_lambda.Runtime.PYTHON_3_11]
         )
 
         env = {
-            "DDB_PRODUCTS": products.table_name,
-            "DDB_LISTINGS": listings.table_name,
-            "DDB_USERS": users.table_name,
-            "DDB_JOBS": jobs.table_name,
-            "DDB_CONVERSATIONS": conversations.table_name,
-            "DDB_MESSAGES": messages.table_name,
+            "DDB_TABLE_PRODUCTS": products.table_name,
+            "DDB_TABLE_LISTINGS": listings.table_name,
+            "DDB_TABLE_USERS": users.table_name,
+            "DDB_TABLE_JOBS": jobs.table_name,
+            "DDB_TABLE_CONVERSATIONS": conversations.table_name,
+            "DDB_TABLE_MESSAGES": messages.table_name,
             "S3_UPLOADS": uploads.bucket_name,
             "S3_ASSETS": assets.bucket_name,
             "S3_PUBLIC": public.bucket_name,

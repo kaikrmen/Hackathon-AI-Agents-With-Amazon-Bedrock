@@ -1,9 +1,9 @@
 from __future__ import annotations
 import base64, json, datetime, io, random
 from typing import Dict, Any, Optional, List, Tuple
-from layers.app_common.python.shared.aws import bedrock_runtime
-from layers.app_common.python.shared.s3 import put_object
-from layers.app_common.python.shared.config import settings
+from shared.aws import bedrock_runtime
+from shared.s3 import put_object
+from shared.config import settings
 
 def _vendor_from_model_id(model_id: str) -> str:
     mid = (model_id or "").lower()

@@ -1,0 +1,5 @@
+boto3==1.40.21
+botocore==1.40.21 
+strands-agents==1.6.0
+strands-agents-tools==0.2.5
+
