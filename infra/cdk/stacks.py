@@ -91,9 +91,9 @@ class CoreStack(Stack):
             "DDB_TABLE_JOBS": jobs.table_name,
             "DDB_TABLE_CONVERSATIONS": conversations.table_name,
             "DDB_TABLE_MESSAGES": messages.table_name,
-            "S3_UPLOADS": uploads.bucket_name,
-            "S3_ASSETS": assets.bucket_name,
-            "S3_PUBLIC": public.bucket_name,
+            "S3_BUCKET_UPLOADS": uploads.bucket_name,
+            "S3_BUCKET_ASSETS": assets.bucket_name,
+            "S3_BUCKET_PUBLIC": public.bucket_name,
             "BEDROCK_TEXT_MODEL_ID": "us.anthropic.claude-sonnet-4-20250514-v1:0",
             "BEDROCK_TEXT_FALLBACK_IDS": "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
             "LLM_TEMPERATURE": "0.3",   
@@ -102,7 +102,9 @@ class CoreStack(Stack):
             "LLM_CACHE_PROMPT": "",     
             "BEDROCK_IMAGE_MODEL_ID": "amazon.titan-image-generator-v2:0",
             "STAGE": "dev",
-            "AUTH_BYPASS": "true",     
+            "AUTH_BYPASS": "true",
+            "COGNITO_USER_POOL_ID": "us-east-1_XXXXXXXXX",
+            "COGNITO_CLIENT_ID": "XXXXXXXXXXXXXXXXXXXX"
         }
 
         fn_interpret = PythonFunction(self, "InterpretFn",
@@ -134,7 +136,7 @@ class CoreStack(Stack):
         messages.grant_read_write_data(fn_interpret); messages.grant_read_write_data(fn_design); messages.grant_read_write_data(fn_create)
 
         api = apigw.RestApi(self, "KaiKashiApi",
-            rest_api_name="KaiKashi Dream API",
+            rest_api_name="KaiKashi DreamForge API",
             deploy_options=apigw.StageOptions(stage_name="prod"))
 
         api.root.add_resource("interpret").add_method("POST", apigw.LambdaIntegration(fn_interpret))

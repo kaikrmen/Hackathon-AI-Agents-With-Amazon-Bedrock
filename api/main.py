@@ -11,7 +11,7 @@ from layers.app_common.python.agents.dream_interpret import interpret_dream
 from layers.app_common.python.agents.design_generate import generate_assets
 from layers.app_common.python.agents.listing_publish import create_product_and_listing
 
-app = FastAPI(title="KaiKashi Dream API", version="1.0.0")
+app = FastAPI(title="KaiKashi DreamForge API", version="1.0.0")
 
 # --------- Auth 
 def get_user_id(auth_bypass: bool = getattr(settings, "auth_bypass", True)) -> str:

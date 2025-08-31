@@ -1,5 +1,6 @@
 boto3==1.40.21
 botocore==1.40.21 
+python-dotenv==1.1.1
 strands-agents==1.6.0
 strands-agents-tools==0.2.5
 

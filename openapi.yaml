@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: KaiKashi Dream API
+  title: KaiKashi DreamForge API
   version: "1.0.0"
   description: |
     API para convertir ideas en *briefs* y generar assets (imagen, DOCX/RTF, GIF, 3D).
