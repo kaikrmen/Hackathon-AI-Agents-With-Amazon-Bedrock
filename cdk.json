@@ -1,7 +1,0 @@
-{
-  "app": "python3 infra/cdk/app.py",
-  "context": {
-    "account": "195937843323", 
-    "region": "us-west-2"
-  }
-}
