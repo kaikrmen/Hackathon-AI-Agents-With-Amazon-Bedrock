@@ -1,9 +1,20 @@
 from __future__ import annotations
 import boto3
 from .config import settings
+from botocore.config import Config
 
 def s3_client():
-    return boto3.client("s3", region_name=settings.aws_region)
+    global _s3
+    if _s3 is None:
+        _s3 = boto3.client(
+            "s3",
+            region_name=settings.aws_region,           
+            config=Config(
+                signature_version="s3v4",              
+                s3={"addressing_style": "virtual"},  
+            ),
+        )
+    return _s3
 
 def dynamodb_client():
     return boto3.client("dynamodb", region_name=settings.aws_region)
